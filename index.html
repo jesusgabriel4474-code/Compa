@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transferência P2P</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+
+    <style>
+        /* Animações suaves personalizadas */
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Ajuste de scrollbar para um visual mais limpo */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col selection:bg-blue-200">
+
+    <header class="bg-white shadow-sm py-4 px-6 flex flex-wrap items-center justify-between gap-4 z-10 relative">
+        <div class="flex items-center gap-2 text-blue-600">
+            <i class="ph-fill ph-planet text-3xl"></i>
+            <h1 class="text-xl font-bold tracking-tight">P2P Connect</h1>
+        </div>
+        <div class="flex items-center gap-3 bg-slate-100 py-2 px-4 rounded-full border border-slate-200 transition-all hover:shadow-md">
+            <span class="text-sm font-medium text-slate-500">Seu ID:</span>
+            <span id="my-id" class="font-mono font-bold text-slate-800 select-all cursor-pointer" title="Clique para copiar">Aguardando...</span>
+            <button onclick="copyMyId()" class="text-blue-500 hover:text-blue-700 transition-colors">
+                <i class="ph ph-copy text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto p-4 gap-6 h-[calc(100vh-80px)]">
+        
+        <aside class="w-full md:w-80 flex flex-col gap-4">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i class="ph ph-plugs-connected text-blue-500"></i> Conectar
+                </h2>
+                <div class="flex flex-col gap-3">
+                    <label class="text-sm text-slate-500">ID do Destinatário</label>
+                    <input type="text" id="peer-id-input" placeholder="Cole o ID aqui..." 
+                           class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                    <button id="connect-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-blue-500/30">
+                        <i class="ph ph-link"></i> Conectar
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex-1">
+                <h3 class="text-sm font-semibold text-slate-500 mb-2 uppercase tracking-wider">Status</h3>
+                <div id="status-indicator" class="flex items-center gap-2 text-amber-500 font-medium">
+                    <i class="ph-fill ph-circle text-xs animate-pulse"></i>
+                    <span id="status-text">Aguardando conexão...</span>
+                </div>
+            </div>
+        </aside>
+
+        <section class="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+            
+            <div id="connection-overlay" class="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-10 transition-opacity duration-300">
+                <i class="ph ph-chat-teardrop-slash text-6xl text-slate-300 mb-4"></i>
+                <p class="text-slate-500 font-medium text-center px-4">Conecte-se a um ID para iniciar o compartilhamento de arquivos e mensagens.</p>
+            </div>
+
+            <div id="chat-box" class="flex-1 overflow-y-auto p-6 flex flex-col gap-4 bg-slate-50/50">
+                </div>
+
+            <div class="p-4 bg-white border-t border-slate-200 flex items-center gap-3">
+                <input type="file" id="file-input" class="hidden">
+                <button onclick="document.getElementById('file-input').click()" class="p-3 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors focus:ring-2 focus:ring-blue-500 outline-none" title="Enviar arquivo">
+                    <i class="ph ph-paperclip text-xl"></i>
+                </button>
+                
+                <input type="text" id="message-input" placeholder="Digite uma mensagem..." 
+                       class="flex-1 px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                
+                <button id="send-btn" class="bg-slate-800 hover:bg-slate-900 text-white p-3 rounded-xl transition-all active:scale-95 shadow-md focus:ring-2 focus:ring-slate-500 outline-none">
+                    <i class="ph-fill ph-paper-plane-right text-xl"></i>
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Inicialização do PeerJS
+        const peer = new Peer();
+        let conn = null;
+
+        // Elementos da UI
+        const myIdEl = document.getElementById('my-id');
+        const peerIdInput = document.getElementById('peer-id-input');
+        const connectBtn = document.getElementById('connect-btn');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const chatBox = document.getElementById('chat-box');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const fileInput = document.getElementById('file-input');
+        const overlay = document.getElementById('connection-overlay');
+
+        // Quando o Peer se conecta ao servidor e ganha um ID
+        peer.on('open', (id) => {
+            myIdEl.textContent = id;
+        });
+
+        // Quando alguém se conecta a nós
+        peer.on('connection', (connection) => {
+            if (conn) conn.close(); // Permite apenas uma conexão por vez
+            conn = connection;
+            setupConnection();
+        });
+
+        // Quando clicamos em conectar
+        connectBtn.addEventListener('click', () => {
+            const targetId = peerIdInput.value.trim();
+            if (!targetId) return alert("Digite um ID válido.");
+            
+            updateStatus('Conectando...', 'text-amber-500');
+            conn = peer.connect(targetId);
+            
+            conn.on('open', () => {
+                setupConnection();
+            });
+        });
+
+        // Configura eventos da conexão ativa
+        function setupConnection() {
+            updateStatus('Conectado', 'text-emerald-500');
+            overlay.classList.add('opacity-0', 'pointer-events-none');
+            
+            conn.on('data', (data) => {
+                if (data.type === 'text') {
+                    addMessage(data.content, false);
+                } else if (data.type === 'file') {
+                    receiveFile(data.file, data.filename, data.filetype);
+                }
+            });
+
+            conn.on('close', () => {
+                updateStatus('Desconectado', 'text-red-500');
+                overlay.classList.remove('opacity-0', 'pointer-events-none');
+            });
+        }
+
+        // Enviar Texto
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || !conn || !conn.open) return;
+
+            conn.send({ type: 'text', content: text });
+            addMessage(text, true);
+            messageInput.value = '';
+        }
+
+        // Enviar Arquivo
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (!file || !conn || !conn.open) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const arrayBuffer = e.target.result;
+                conn.send({
+                    type: 'file',
+                    file: arrayBuffer,
+                    filename: file.name,
+                    filetype: file.type
+                });
+                addMessage(`Você enviou um arquivo: ${file.name}`, true, true);
+            };
+            reader.readAsArrayBuffer(file);
+            fileInput.value = ''; // Reset
+        });
+
+        // Receber Arquivo e criar link de download
+        function receiveFile(arrayBuffer, filename, filetype) {
+            const blob = new Blob([arrayBuffer], { type: filetype });
+            const url = URL.createObjectURL(blob);
+            
+            const fileHtml = `
+                <div class="flex items-center gap-3 bg-white border border-slate-200 p-3 rounded-lg mt-2">
+                    <i class="ph-fill ph-file text-3xl text-blue-500"></i>
+                    <div class="flex-1 overflow-hidden">
+                        <p class="text-sm font-bold truncate" title="${filename}">${filename}</p>
+                        <p class="text-xs text-slate-500">Arquivo recebido</p>
+                    </div>
+                    <a href="${url}" download="${filename}" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
+                        <i class="ph ph-download-simple text-lg"></i> Baixar
+                    </a>
+                </div>
+            `;
+            
+            addMessage(fileHtml, false, true, true);
+        }
+
+        // Adicionar mensagem na tela
+        function addMessage(content, isMine, isFileEvent = false, isRawHtml = false) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `max-w-[85%] fade-in flex flex-col ${isMine ? 'self-end items-end' : 'self-start items-start'}`;
+            
+            const innerDiv = document.createElement('div');
+            
+            if (isFileEvent) {
+                innerDiv.className = `text-sm text-slate-500 mb-1 ${isRawHtml ? 'w-full md:w-80' : ''}`;
+                if (isRawHtml) {
+                    innerDiv.innerHTML = content;
+                } else {
+                    innerDiv.innerHTML = `<i class="ph ph-info"></i> ${content}`;
+                }
+            } else {
+                innerDiv.className = `px-5 py-3 rounded-2xl shadow-sm ${
+                    isMine ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm'
+                }`;
+                innerDiv.textContent = content;
+            }
+
+            msgDiv.appendChild(innerDiv);
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Atualizar Status UI
+        function updateStatus(text, colorClass) {
+            statusText.textContent = text;
+            statusIndicator.className = `flex items-center gap-2 font-medium ${colorClass}`;
+            statusIndicator.querySelector('i').className = `ph-fill ph-circle text-xs ${text === 'Conectando...' ? 'animate-pulse' : ''}`;
+        }
+
+        // Copiar ID
+        function copyMyId() {
+            const id = myIdEl.textContent;
+            if (id === 'Aguardando...') return;
+            navigator.clipboard.writeText(id).then(() => {
+                const icon = document.querySelector('button[onclick="copyMyId()"] i');
+                icon.className = 'ph-fill ph-check-circle text-emerald-500 text-lg';
+                setTimeout(() => icon.className = 'ph ph-copy text-lg', 2000);
+            });
+        }
+    </script>
+</body>
+</html>
