@@ -2,51 +2,62 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>P2P Conexão</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+    <title>P2P Connect - Simples</title>
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; }
-        .box { background: #333; padding: 15px; border-radius: 5px; }
-        #log { color: #ff0; font-size: 12px; margin-top: 10px; }
+        body { font-family: sans-serif; background: #f4f4f4; margin: 0; padding: 10px; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; }
+        #chat-box { height: 200px; border: 1px solid #ccc; overflow-y: scroll; margin: 10px 0; padding: 5px; background: #fff; }
     </style>
 </head>
 <body>
 
-<div class="box">
-    <h3>Status: <span id="status">Iniciando...</span></h3>
+<div class="container">
+    <h3>P2P Connect</h3>
     <p>Seu ID: <b id="my-id">Aguardando...</b></p>
-    <input type="text" id="peer-id-input" placeholder="ID do destinatário" style="width:100%; padding:8px;">
-    <button id="connect-btn" style="width:100%; padding:8px; margin-top:5px;">Conectar</button>
-    <div id="log"></div>
+    
+    <input type="text" id="peer-id-input" placeholder="ID do destinatário">
+    <button id="connect-btn">Conectar</button>
+    
+    <div id="chat-box"></div>
+    
+    <input type="text" id="message-input" placeholder="Mensagem...">
+    <button id="send-btn">Enviar</button>
 </div>
 
 <script>
-    var logEl = document.getElementById('log');
-    function log(msg) { logEl.innerHTML += msg + '<br>'; }
+    var peer = new Peer();
+    var conn = null;
 
-    // Verificação de segurança: checar se o PeerJS carregou
-    if (typeof Peer === 'undefined') {
-        log("ERRO: O motor PeerJS não carregou. Verifique sua internet ou bloqueio da TV.");
-    } else {
-        var peer = new Peer();
-        
-        peer.on('open', function(id) {
-            document.getElementById('my-id').innerText = id;
-            document.getElementById('status').innerText = "Online";
+    peer.on('open', function(id) {
+        document.getElementById('my-id').innerText = id;
+    });
+
+    peer.on('connection', function(c) {
+        conn = c;
+        setup();
+    });
+
+    document.getElementById('connect-btn').onclick = function() {
+        var id = document.getElementById('peer-id-input').value;
+        conn = peer.connect(id);
+        setup();
+    };
+
+    function setup() {
+        conn.on('data', function(data) {
+            var chat = document.getElementById('chat-box');
+            chat.innerHTML += '<p>Eles: ' + data + '</p>';
         });
-
-        peer.on('error', function(err) {
-            log("Erro de Conexão: " + err.type);
-            document.getElementById('status').innerText = "Erro";
-        });
-
-        document.getElementById('connect-btn').onclick = function() {
-            var id = document.getElementById('peer-id-input').value;
-            var conn = peer.connect(id);
-            conn.on('open', function() { log("Conectado com sucesso!"); });
-            conn.on('error', function(e) { log("Falha na conexão: " + e); });
-        };
     }
+
+    document.getElementById('send-btn').onclick = function() {
+        var msg = document.getElementById('message-input').value;
+        conn.send(msg);
+        document.getElementById('chat-box').innerHTML += '<p>Você: ' + msg + '</p>';
+        document.getElementById('message-input').value = '';
+    };
 </script>
 
 </body>
