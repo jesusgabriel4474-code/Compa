@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>P2P Connect - Simples</title>
+    <title>P2P Connect - Arquivos</title>
     <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #f4f4f4; margin: 0; padding: 10px; }
@@ -23,7 +23,11 @@
     <div id="chat-box"></div>
     
     <input type="text" id="message-input" placeholder="Mensagem...">
-    <button id="send-btn">Enviar</button>
+    <button id="send-btn">Enviar Mensagem</button>
+    
+    <hr>
+    <input type="file" id="file-input">
+    <button id="send-file-btn" style="background: #e2e8f0;">Enviar Arquivo</button>
 </div>
 
 <script>
@@ -48,7 +52,13 @@
     function setup() {
         conn.on('data', function(data) {
             var chat = document.getElementById('chat-box');
-            chat.innerHTML += '<p>Eles: ' + data + '</p>';
+            if (data.type === 'file') {
+                var blob = new Blob([data.file], { type: data.fileType });
+                var url = URL.createObjectURL(blob);
+                chat.innerHTML += '<p>Eles: <a href="'+url+'" download="'+data.fileName+'">Baixar: '+data.fileName+'</a></p>';
+            } else {
+                chat.innerHTML += '<p>Eles: ' + data + '</p>';
+            }
         });
     }
 
@@ -57,6 +67,22 @@
         conn.send(msg);
         document.getElementById('chat-box').innerHTML += '<p>Você: ' + msg + '</p>';
         document.getElementById('message-input').value = '';
+    };
+
+    document.getElementById('send-file-btn').onclick = function() {
+        var file = document.getElementById('file-input').files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(evt) {
+            conn.send({
+                type: 'file',
+                file: evt.target.result,
+                fileName: file.name,
+                fileType: file.type
+            });
+            document.getElementById('chat-box').innerHTML += '<p>Você enviou o arquivo: ' + file.name + '</p>';
+        };
+        reader.readAsArrayBuffer(file);
     };
 </script>
 
